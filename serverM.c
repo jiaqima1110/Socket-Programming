@@ -28,6 +28,10 @@ socklen_t client_size = sizeof(client_addr);
 // Schedule info
 char names_A[4000];
 char names_B[4000];
+char names_A_list[200][20];
+char names_B_list[200][20];
+int idx_A;
+int idx_B;
 char names_client_A[4000];
 char names_client_B[4000];
 char names_client[4000];
@@ -41,11 +45,11 @@ void clean_message_buffers();
 void setup_UDP();
 void setup_TCP();
 void get_names();
-void calculate_intervals();
+int calculate_intervals();
 void update();
-void check_names_client();
 
 // helper functions
+void check_names_client();
 void calculate();
 void init_result();
 void decode_time(char result_A_str[4000], char result_B_str[4000]);
@@ -67,14 +71,17 @@ int main() {
 
         // Get calculated intervals from backend servers,
         // calculate final intervals based on backend servers' results
-        calculate_intervals();
+        int result = calculate_intervals();
 
         // Update:
         // step 1: Get update info from client's input,
         // step 2: forward update info to backend servers,
         // step 3: get updated results from backend servers,
         // step 4: forward updated results to client
-        update();
+        if (result != -1) {
+            update();
+        }
+
         clean_message_buffers();
     }
 
@@ -118,6 +125,8 @@ void setup_UDP() {
     memset(names_A, '\0', sizeof(names_A));
     memset(names_B, '\0', sizeof(names_B));
 
+    char tmp_names[4000];
+    char *name;
     // Receive serverA's names
     if (recvfrom(socket_desc_UDP, names_A, sizeof(names_A), 0,
                  (struct sockaddr*)&serverA_addr, &serverA_struct_length) < 0) {
@@ -125,6 +134,14 @@ void setup_UDP() {
     }
     printf("Main Server received the username list from server A using UDP over port %i.\n",
            ntohs(serverM_addr_UDP.sin_port));
+    strcpy(tmp_names, names_A);
+    name = strtok(tmp_names, " ");
+    idx_A = 0;
+    while (name != NULL) {
+        strcpy(names_A_list[idx_A], name);
+        name = strtok(NULL, " ");
+        idx_A++;
+    }
 
     // Receive serverB's names
     if (recvfrom(socket_desc_UDP, names_B, sizeof(names_B), 0,
@@ -133,6 +150,14 @@ void setup_UDP() {
     }
     printf("Main Server received the username list from server B using UDP over port %i.\n",
            ntohs(serverM_addr_UDP.sin_port));
+    strcpy(tmp_names, names_B);
+    name = strtok(tmp_names, " ");
+    idx_B = 0;
+    while (name != NULL) {
+        strcpy(names_B_list[idx_B], name);
+        name = strtok(NULL, " ");
+        idx_B++;
+    }
 }
 
 void setup_TCP() {
@@ -151,14 +176,14 @@ void setup_TCP() {
 
     // Listen for clients
     if (listen(socket_desc_TCP, 1) < 0) {
-        printf("Error while listening\n");
+        printf("Error listening connection\n");
     }
 
     // Accept an incoming connection
     client_size = sizeof(client_addr);
     client_sock = accept(socket_desc_TCP, (struct sockaddr*)&client_addr, &client_size);
     if (client_sock < 0) {
-        printf("Can't accept \n");
+        printf("Can't accept connection\n");
     }
 }
 
@@ -215,27 +240,41 @@ void get_names() {
 void check_names_client() {
     char *name;
 
-    strcpy(serverM_message, "");
-    strcpy(names_client, "");
+    memset(serverM_message, '\0', sizeof(serverM_message));
+    memset(names_client, '\0', sizeof(names_client));
     name = strtok(client_message, " \n");
     while (name != NULL) {
-        if (strstr(names_A, name)) {
-            strcat(names_client_A, name);
-            strcat(names_client_A, ", ");
-            strcat(names_client, name);
-            strcat(names_client, ", ");
-        } else if (strstr(names_B, name)) {
-            strcat(names_client_B, name);
-            strcat(names_client_B, ", ");
-            strcat(names_client, name);
-            strcat(names_client, ", ");
-        } else {
+        int exist = -1;
+
+        for (int i = 0; i < idx_A; i++) {
+            if (strcmp(names_A_list[i], name) == 0) {
+                strcat(names_client_A, name);
+                strcat(names_client_A, ", ");
+                strcat(names_client, name);
+                strcat(names_client, ", ");
+                exist = 1;
+                break;
+            }
+        }
+
+        for (int i = 0; i < idx_B; i++) {
+            if (strcmp(names_B_list[i], name) == 0) {
+                strcat(names_client_B, name);
+                strcat(names_client_B, ", ");
+                strcat(names_client, name);
+                strcat(names_client, ", ");
+                exist = 1;
+                break;
+            }
+        }
+
+        if (exist == -1) {
             strcat(serverM_message, name);
             strcat(serverM_message, ", ");
         }
+
         name = strtok(NULL, " \n");
     }
-
     free(name);
 
     if (strcmp(names_client_A, "") != 0) {
@@ -269,7 +308,18 @@ void check_names_client() {
     }
 }
 
-void calculate_intervals() {
+int calculate_intervals() {
+    // All input names are not existed
+    if (strcmp(names_client, "") == 0) {
+        sleep(1);
+        if (send(client_sock, "ALL input names are not existed.",strlen("ALL input names are not existed."), 0) < 0) {
+            printf("Can't send to client\n");
+        } else {
+            printf("Main Server sent the result to the client.\n");
+        }
+        return -1;
+    }
+
     // Calculate the final result
     if (strcmp(result_str_A, "") == 0) {
         strcpy(serverM_message, "[");
@@ -286,16 +336,7 @@ void calculate_intervals() {
     }
 
     // Send result to client
-    if (strcmp(names_client, "") == 0) {
-        strcpy(serverM_message, "");
-        strcat(serverM_message, "No existed clients.");
-        if (send(client_sock, serverM_message, strlen(serverM_message), 0) < 0) {
-            printf("Can't send to client\n");
-        } else {
-            printf("Main Server sent the result to the client.\n");
-        }
-        return;
-    }
+    sleep(1);
     strcat(serverM_message, " works for ");
     strcat(serverM_message, names_client);
     if (send(client_sock, serverM_message, strlen(serverM_message), 0) < 0) {
@@ -303,6 +344,8 @@ void calculate_intervals() {
     } else {
         printf("Main Server sent the result to the client.\n");
     }
+
+    return 0;
 }
 
 void calculate() {
@@ -331,7 +374,7 @@ void calculate() {
         }
 
         int end_time;
-        if (result_A[result_ptr][1] <= result_B[result_B_ptr][1]) {
+        if (result_A[result_A_ptr][1] <= result_B[result_B_ptr][1]) {
             end_time = result_A[result_A_ptr][1];
             result_A_ptr++;
         } else {
@@ -345,6 +388,7 @@ void calculate() {
     }
 
     // Save final result to serverM_message
+    memset(serverM_message, '\0', sizeof(serverM_message));
     strcpy(serverM_message, "[");
     int i = 0;
     char str[5];
@@ -411,5 +455,55 @@ void init_result() {
 }
 
 void update() {
+    // Receive client's update interval info
+    if (recv(client_sock, client_message, sizeof(client_message), 0) < 0) {
+        printf("Couldn't receive from client\n");
+    }
 
+    // Forward update info to backend servers
+    strcpy(serverA_message, "");
+    strcpy(serverB_message, "");
+    if (strcmp(names_client_A, "") != 0) {
+        strcpy(serverM_message, "");
+        strcat(serverM_message, names_client_A);
+        strcat(serverM_message, ";");
+        strcat(serverM_message, client_message);
+        if (sendto(socket_desc_UDP, serverM_message, strlen(serverM_message), 0,
+                   (struct sockaddr*)&serverA_addr, serverA_struct_length) < 0) {
+            printf("Can't send to A\n");
+        }
+
+        // Receive serverA's update result
+        if (recvfrom(socket_desc_UDP, serverA_message, sizeof(serverA_message), 0,
+                     (struct sockaddr*)&serverA_addr, &serverA_struct_length) < 0) {
+            printf("Couldn't receive from A\n");
+        }
+    }
+
+    if (strcmp(names_client_B, "") != 0) {
+        strcpy(serverM_message, "");
+        strcat(serverM_message, names_client_B);
+        strcat(serverM_message, ";");
+        strcat(serverM_message, client_message);
+        if (sendto(socket_desc_UDP, serverM_message, strlen(serverM_message), 0,
+                   (struct sockaddr*)&serverB_addr, serverB_struct_length) < 0) {
+            printf("Can't send to B\n");
+        }
+
+        // Receive serverB's update result
+        if (recvfrom(socket_desc_UDP, serverB_message, sizeof(serverB_message), 0,
+                     (struct sockaddr*)&serverB_addr, &serverB_struct_length) < 0) {
+            printf("Couldn't receive from B\n");
+        }
+    }
+
+    // Send update result to client
+    strcpy(serverM_message, "");
+    strcat(serverM_message, serverA_message);
+    strcat(serverM_message, serverB_message);
+    if (send(client_sock, serverM_message, strlen(serverM_message), 0) < 0) {
+        printf("Can't send to client\n");
+    } else {
+        printf("Main Server sent the update result to the client.\n");
+    }
 }

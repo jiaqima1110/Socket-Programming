@@ -13,7 +13,7 @@ socklen_t serverM_struct_length = sizeof(serverM_addr);
 
 // Schedule info
 char names[200][20];
-int slots[200][51][2];
+int slots[200][52][2];
 int idx;
 
 void read_in_info();
@@ -28,6 +28,7 @@ int get_idx(char *name);
 void init_slots();
 void calculate();
 void remove_space(char *str);
+void update_slot(int slot_idx, int start, int end);
 
 int main() {
     // Read from a.txt
@@ -84,7 +85,7 @@ void remove_space(char *str) {
 
 void init_slots() {
     for (int i = 0; i < 200; i++) {
-        for (int j = 0; j < 51; j++) {
+        for (int j = 0; j < 52; j++) {
             slots[i][j][0] = -1;
             slots[i][j][1] = -1;
         }
@@ -140,7 +141,7 @@ void setup_UDP() {
     printf("Server A is up and running using UDP on port %i.\n",
            ntohs(serverA_addr.sin_port));
 
-    // Send names in serverA to serverM
+    // Send names in server A to server M
     for (int i = 0; i < idx; i++) {
         strcat(serverA_message, names[i]);
         strcat(serverA_message, " ");
@@ -236,6 +237,7 @@ void calculate() {
             tmp_ptr++;
         }
 
+
         // Assign tmp_result into result
         for (int i = 0; i < 51; i++) {
             result[i][0] = tmp_result[i][0];
@@ -269,8 +271,113 @@ int get_idx(char *name) {
             return i;
         }
     }
+    return 0;
 }
 
 void update() {
+    // Receive serverM's update info
+    if (recvfrom(socket_desc, serverM_message, sizeof(serverM_message), 0,
+                 (struct sockaddr*)&serverM_addr, &serverM_struct_length) < 0) {
+        printf("Error while receiving serverM's msg\n");
+    }
 
+    strcpy(serverA_message, "");
+    char tmp_str[4000];
+    char str[4000];
+
+    // Decode start time and end time
+    strcpy(tmp_str, serverM_message);
+    char *time_str = strtok(tmp_str, ";");
+    time_str = strtok(NULL, ";");
+    int start_time = atoi(strtok(time_str, ","));
+    int end_time = atoi(strtok(NULL, ","));
+    printf("Register a meeting at [%d,%d] and update the availability for the following users:\n",
+            start_time, end_time);
+
+    // Update each time slot
+    strcpy(tmp_str, serverM_message);
+    char *name_str = strtok(tmp_str, ";");
+    name_str = strtok(name_str, ", ");
+    while (name_str != NULL) {
+        sprintf(str, "%s: updated from [", name_str);
+        strcat(serverA_message, str);
+        int name_idx = get_idx(name_str);
+        update_slot(name_idx, start_time, end_time);
+        name_str = strtok(NULL, ", ");
+    }
+
+    // Send update to server M
+    printf("%s", serverA_message);
+    if (sendto(socket_desc, serverA_message, strlen(serverA_message), 0,
+               (struct sockaddr*)&serverM_addr, serverM_struct_length) < 0) {
+        printf("Unable to send results\n");
+    } else {
+        printf("Notified Main Server that registration has finished.\n");
+    }
+}
+
+void update_slot(int slot_idx, int start, int end) {
+    char str[4000];
+
+    // Origin time slots
+    int p = 0;
+    while (slots[slot_idx][p][0] != -1) {
+        sprintf(str, "[%d,%d]", slots[slot_idx][p][0], slots[slot_idx][p][1]);
+        strcat(serverA_message, str);
+        if (slots[slot_idx][p+1][0] != -1) {
+            strcat(serverA_message, ",");
+        }
+        p++;
+    }
+    strcat(serverA_message, "] to [");
+
+    // Find the slot need to be modified
+    int i = 0;
+    while (slots[slot_idx][i][0] != -1) {
+        if (slots[slot_idx][i][0] <= start && slots[slot_idx][i][1] >= end) {
+            // Found the slot need to be modified
+            break;
+        }
+        i++;
+    }
+
+    // Modify the slot
+    if (slots[slot_idx][i][0] == start && slots[slot_idx][i][1] > end) {
+        slots[slot_idx][i][0] = end;
+    } else if (slots[slot_idx][i][0] < start && slots[slot_idx][i][1] == end) {
+        slots[slot_idx][i][1] = start;
+    } else if (slots[slot_idx][i][0] == start && slots[slot_idx][i][1] == end) {
+        // Remove the slot
+        int j = i;
+        while (slots[slot_idx][j][0] != -1) {
+            slots[slot_idx][j][0] = slots[slot_idx][j+1][0];
+            slots[slot_idx][j][1] = slots[slot_idx][j+1][1];
+            j++;
+        }
+    } else {
+        // Break the slot
+        int j = i;
+        while (slots[slot_idx][j][0] != -1) {
+            j++;
+        }
+        while (j != i) {
+            slots[slot_idx][j][0] = slots[slot_idx][j-1][0];
+            slots[slot_idx][j][1] = slots[slot_idx][j-1][1];
+            j--;
+        }
+        slots[slot_idx][i][1] = start;
+        slots[slot_idx][i+1][0] = end;
+    }
+
+    // Updated time slots
+    int q = 0;
+    while (slots[slot_idx][q][0] != -1) {
+        sprintf(str, "[%d,%d]", slots[slot_idx][q][0], slots[slot_idx][q][1]);
+        strcat(serverA_message, str);
+        if (slots[slot_idx][q+1][0] != -1) {
+            strcat(serverA_message, ",");
+        }
+        q++;
+    }
+    strcat(serverA_message, "]\n");
 }
