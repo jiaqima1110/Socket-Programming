@@ -312,7 +312,7 @@ int calculate_intervals() {
     // All input names are not existed
     if (strcmp(names_client, "") == 0) {
         sleep(1);
-        if (send(client_sock, "ALL input names are not existed.",strlen("ALL input names are not existed."), 0) < 0) {
+        if (send(client_sock, "ALL input names are not existed.", strlen("ALL input names are not existed."), 0) < 0) {
             printf("Can't send to client\n");
         } else {
             printf("Main Server sent the result to the client.\n");
@@ -322,14 +322,10 @@ int calculate_intervals() {
 
     // Calculate the final result
     if (strcmp(result_str_A, "") == 0) {
-        strcpy(serverM_message, "[");
-        strcat(serverM_message, result_str_B);
-        strcat(serverM_message, "]");
+        strcpy(serverM_message, "[]");
         printf("Found the intersection between the results from server A and B:\n%s.\n", serverM_message);
     } else if (strcmp(result_str_B, "") == 0) {
-        strcpy(serverM_message, "[");
-        strcat(serverM_message, result_str_A);
-        strcat(serverM_message, "]");
+        strcpy(serverM_message, "[]");
         printf("Found the intersection between the results from server A and B:\n%s.\n", serverM_message);
     } else {
         calculate();
@@ -343,6 +339,22 @@ int calculate_intervals() {
         printf("Can't send to client\n");
     } else {
         printf("Main Server sent the result to the client.\n");
+    }
+    if (serverM_message[1] == ']') {
+        // Forward no need to update info to backend servers
+        if (strcmp(names_client_A, "") != 0) {
+            if (sendto(socket_desc_UDP, "No need to update", strlen("No need to update"), 0,
+                       (struct sockaddr*)&serverA_addr, serverA_struct_length) < 0) {
+                printf("Can't send to A\n");
+            }
+        }
+        if (strcmp(names_client_B, "") != 0) {
+            if (sendto(socket_desc_UDP, "No need to update", strlen("No need to update"), 0,
+                       (struct sockaddr*)&serverB_addr, serverB_struct_length) < 0) {
+                printf("Can't send to B\n");
+            }
+        }
+        return -1;
     }
 
     return 0;

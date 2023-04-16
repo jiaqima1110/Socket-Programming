@@ -74,6 +74,7 @@ void read_in_info() {
     fclose(fp);
 }
 
+// REUSED CODE from internet
 void remove_space(char *str) {
     char *tmp = str;
     do {
@@ -279,6 +280,9 @@ void update() {
     if (recvfrom(socket_desc, serverM_message, sizeof(serverM_message), 0,
                  (struct sockaddr*)&serverM_addr, &serverM_struct_length) < 0) {
         printf("Error while receiving serverM's msg\n");
+    }
+    if (strcmp(serverM_message, "No need to update") == 0) {
+        return;
     }
 
     strcpy(serverA_message, "");

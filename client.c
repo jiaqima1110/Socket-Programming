@@ -106,6 +106,9 @@ int find_intervals() {
     } else {
         printf("Client received the reply from Main Server using TCP over port %i:\nTime intervals %s.\n",
                ntohs(client_addr.sin_port), serverM_message);
+        if (serverM_message[1] == ']') {
+            return -1;
+        }
     }
 
     return 0;
