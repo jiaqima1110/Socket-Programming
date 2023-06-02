@@ -1,5 +1,3 @@
-## name: 
-## student ID:  
 ## What have done for each code file:
 ### Phase 1: Boot-up
 serverM: 
