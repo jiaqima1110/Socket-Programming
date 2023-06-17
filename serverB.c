@@ -238,27 +238,28 @@ void calculate() {
             tmp_ptr++;
         }
 
+        // Other time slots will be unavailable
+        for (int i = tmp_ptr; i < 51; i++) {
+            tmp_result[i][0] = -1;
+            tmp_result[i][1] = -1;
+        }
+
         // Assign tmp_result into result
         for (int i = 0; i < 51; i++) {
             result[i][0] = tmp_result[i][0];
             result[i][1] = tmp_result[i][1];
         }
 
-        name = strtok(NULL, " ");
+        name = strtok(NULL, ", ");
     }
 
     // step 3: save calculated result to serverB_message
     strcpy(serverB_message, "");
     int i = 0;
-    char str[5];
+    char str[10];
     while (result[i][0] != -1) {
-        strcat(serverB_message, "[");
-        sprintf(str, "%d", result[i][0]);
+        sprintf(str, "[%d,%d],", result[i][0], result[i][1]);
         strcat(serverB_message, str);
-        strcat(serverB_message, ",");
-        sprintf(str, "%d", result[i][1]);
-        strcat(serverB_message, str);
-        strcat(serverB_message, "],");
         i++;
     }
     serverB_message[strlen(serverB_message) - 1] = 0;
@@ -276,6 +277,7 @@ int get_idx(char *name) {
 
 void update() {
     // Receive serverM's update info
+    memset(serverM_message, '\0', sizeof(serverM_message));
     if (recvfrom(socket_desc, serverM_message, sizeof(serverM_message), 0,
                  (struct sockaddr*)&serverM_addr, &serverM_struct_length) < 0) {
         printf("Error while receiving serverM's msg\n");

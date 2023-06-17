@@ -200,6 +200,8 @@ void get_names() {
     check_names_client();
 
     // Forward names to backend servers
+    strcpy(result_str_A, "NO RETURN");
+    strcpy(result_str_B, "NO RETURN");
     if (strcmp(names_client_A, "") != 0) {
         if (sendto(socket_desc_UDP, names_client_A, strlen(names_client_A), 0,
                    (struct sockaddr*)&serverA_addr, serverA_struct_length) < 0) {
@@ -209,13 +211,13 @@ void get_names() {
                names_client_A);
 
         // Receive serverA's result
+        memset(result_str_A, '\0', sizeof(result_str_A));
         if (recvfrom(socket_desc_UDP, result_str_A, sizeof(result_str_A), 0,
                      (struct sockaddr*)&serverA_addr, &serverA_struct_length) < 0) {
             printf("Couldn't receive from A\n");
-        } else if (strcmp(names_client_A, "") != 0) {
-            printf("Main Server received from server A the intersection result using UDP over port %i:\n[%s].\n",
-                   ntohs(serverM_addr_UDP.sin_port), result_str_A);
         }
+        printf("Main Server received from server A the intersection result using UDP over port %i:\n[%s].\n",
+                   ntohs(serverM_addr_UDP.sin_port), result_str_A);
     }
 
     if (strcmp(names_client_B, "") != 0) {
@@ -227,13 +229,13 @@ void get_names() {
                names_client_B);
 
         // Receive serverB's result
+        memset(result_str_B, '\0', sizeof(result_str_B));
         if (recvfrom(socket_desc_UDP, result_str_B, sizeof(result_str_B), 0,
                      (struct sockaddr*)&serverB_addr, &serverB_struct_length) < 0) {
             printf("Couldn't receive from B\n");
-        } else if (strcmp(names_client_B, "") != 0) {
-            printf("Main Server received from server B the intersection result using UDP over port %i:\n[%s].\n",
-                   ntohs(serverM_addr_UDP.sin_port), result_str_B);
         }
+        printf("Main Server received from server B the intersection result using UDP over port %i:\n[%s].\n",
+                   ntohs(serverM_addr_UDP.sin_port), result_str_B);
     }
 }
 
@@ -321,11 +323,15 @@ int calculate_intervals() {
     }
 
     // Calculate the final result
-    if (strcmp(result_str_A, "") == 0) {
-        strcpy(serverM_message, "[]");
+    if (strcmp(result_str_A, "NO RETURN") == 0) {
+        strcpy(serverM_message, "[");
+        strcat(serverM_message, result_str_B);
+        strcat(serverM_message, "]");
         printf("Found the intersection between the results from server A and B:\n%s.\n", serverM_message);
-    } else if (strcmp(result_str_B, "") == 0) {
-        strcpy(serverM_message, "[]");
+    } else if (strcmp(result_str_B, "NO RETURN") == 0) {
+        strcpy(serverM_message, "[");
+        strcat(serverM_message, result_str_A);
+        strcat(serverM_message, "]");
         printf("Found the intersection between the results from server A and B:\n%s.\n", serverM_message);
     } else {
         calculate();
